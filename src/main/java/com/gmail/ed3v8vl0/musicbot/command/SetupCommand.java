@@ -37,13 +37,12 @@ public class SetupCommand implements ICommand {
                                                     .then(createMessage.addReaction(ReactionEmoji.unicode("\u23ED"))).block();
 
                                             if (musicBot.registerChannel(guild, createChannel)) {
-                                                channel.createMessage(messageCreateSpec -> messageCreateSpec.addEmbed(embed -> embed.setColor(Color.WHITE).setTitle("채널 설치를 완료했습니다"))).subscribe();
+                                                musicBot.getMessageScheduler().createSchedule(message.getChannelId(), messageCreateSpec -> messageCreateSpec.addEmbed(embed -> embed.setColor(Color.WHITE).setTitle("채널 설치를 완료했습니다")), message1 -> message1.delete(), 10000L);
                                             } else {
-                                                createChannel.delete()
-                                                        .then(channel.createMessage(messageCreateSpec -> messageCreateSpec.addEmbed(embed -> embed.setColor(Color.WHITE).setTitle("채널 설치중 오류가 발생했습니다. 관리자에게 문의해주세요.")))).block();
+                                                musicBot.getMessageScheduler().createSchedule(message.getChannelId(), messageCreateSpec -> messageCreateSpec.addEmbed(embed -> embed.setColor(Color.WHITE).setTitle("채널 설치중 오류가 발생했습니다. 관리자에게 문의해주세요.")), message1 -> message1.delete(), 10000L);
                                             }
                                         } else {
-                                            channel.createMessage(messageCreateSpec -> messageCreateSpec.addEmbed(embed -> embed.setColor(Color.WHITE).setTitle("이미 설치된 채널이 있습니다."))).block();
+                                            musicBot.getMessageScheduler().createSchedule(message.getChannelId(), messageCreateSpec -> messageCreateSpec.addEmbed(embed -> embed.setColor(Color.WHITE).setTitle("이미 설치된 채널이 있습니다.")), message1 -> message1.delete(), 10000L);
                                         }
                                     })
                             )

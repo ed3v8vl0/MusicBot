@@ -1,6 +1,7 @@
 package com.gmail.ed3v8vl0.musicbot;
 
 import com.gmail.ed3v8vl0.musicbot.command.*;
+import com.gmail.ed3v8vl0.musicbot.schedule.MessageScheduler;
 import com.gmail.ed3v8vl0.musicbot.youtube.YoutubeAPI;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.player.DefaultAudioPlayerManager;
@@ -22,27 +23,40 @@ import java.io.IOException;
 import java.sql.*;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 
 public class MusicBot {
+    public static final Snowflake EMPTY_SNOWFLAKE = Snowflake.of(-1);
+
     private static final Logger logger = LoggerFactory.getLogger(MusicBot.class);
     private static MusicBot INSTANCE;
 
-    private final String DISCORD_TOKEN;
     // Key: GuildId | Value: ChannelId
     private final Map<Snowflake, Snowflake> channelMap = new HashMap<>();
+    // Key: Command Name | Value: Command
     private final Map<String, ICommand> commandMap = new HashMap<>();
 
-    @Getter
-    private final YoutubeAPI youtubeAPI;
-    @Getter
-    private final AudioPlayerManager audioPlayerManager;
     @Getter
     private final DiscordClient discordClient;
     @Getter
     private final GatewayDiscordClient gatewayDiscordClient;
     @Getter
     private Connection connection;
+
+    @Getter
+    private final MessageScheduler messageScheduler;
+    @Getter
+    private final EventListener eventListener;
+    @Getter
+    private final YoutubeAPI youtubeAPI;
+    @Getter
+    private final AudioPlayerManager audioPlayerManager;
+
+    public static void main(final String[] args) {
+        INSTANCE = new MusicBot();
+        INSTANCE.getGatewayDiscordClient().onDisconnect().block();
+    }
 
     private MusicBot() {
         Properties properties = new Properties();
@@ -54,19 +68,23 @@ public class MusicBot {
             PreparedStatement statement = connection.prepareStatement("SELECT * FROM channels");
             ResultSet resultSet = statement.executeQuery();
 
-            while (resultSet.next()) {
+            while (resultSet.next())
                 channelMap.put(Snowflake.of(resultSet.getLong(1)), Snowflake.of(resultSet.getLong(2)));
-            }
         } catch (ClassNotFoundException | SQLException | IOException e) {
             logger.error("", e);
+            System.exit(1);
         }
 
-        youtubeAPI = new YoutubeAPI(properties.getProperty("GOOGLE_KEY"));
-        DISCORD_TOKEN = properties.getProperty("DISCORD_TOKEN");
-        discordClient = DiscordClient.create(DISCORD_TOKEN);
-        gatewayDiscordClient = discordClient.login().block();
-        gatewayDiscordClient.on(new EventListener(this)).subscribe();
 
+        //PreInit
+        youtubeAPI = new YoutubeAPI(properties.getProperty("GOOGLE_KEY"));
+        discordClient = DiscordClient.create(properties.getProperty("DISCORD_TOKEN"));
+        gatewayDiscordClient = discordClient.login().block();
+        messageScheduler = new MessageScheduler(this);
+        eventListener = new EventListener(this, messageScheduler);
+
+        //Init
+        gatewayDiscordClient.on(eventListener).subscribe();
         audioPlayerManager = new DefaultAudioPlayerManager();
         audioPlayerManager.getConfiguration().setFrameBufferFactory(NonAllocatingAudioFrameBuffer::new);
         AudioSourceManagers.registerRemoteSources(audioPlayerManager);
@@ -78,11 +96,6 @@ public class MusicBot {
         commandMap.put("!pause", new PauseCommand());
         commandMap.put("!resume", new ResumeCommand());
         commandMap.put("!skip", new SkipCommand());
-    }
-
-    public static void main(final String[] args) {
-        INSTANCE = new MusicBot();
-        INSTANCE.getGatewayDiscordClient().onDisconnect().block();
     }
 
     public boolean registerChannel(Guild guild, TextChannel channel) {
@@ -116,7 +129,7 @@ public class MusicBot {
     }
 
     public Snowflake getRegisterChannel(Snowflake guildId) {
-        return channelMap.get(guildId);
+        return Optional.ofNullable(channelMap.get(guildId)).orElse(EMPTY_SNOWFLAKE);
     }
 
     public ICommand getCommand(String command) {

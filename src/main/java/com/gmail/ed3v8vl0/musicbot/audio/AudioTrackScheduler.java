@@ -37,55 +37,44 @@ public final class AudioTrackScheduler extends AudioEventAdapter {
         trackPlay(video, audioTrack, false);
     }
 
-    /**
-     * 굳이 여기서 hasRegisterChannel을 확인해야 하는지
-     * Guild에서 추방을 당하면 trackScheduler도 작동하지 않는지 확인.
-     */
-    public synchronized void trackPlay(Video video, AudioTrack audioTrack, boolean force) {
-        final boolean playing = player.startTrack(audioTrack, !force);
+    public synchronized void trackPlay(Video video, AudioTrack audioTrack, boolean noInterrupt) {
+        final boolean trackStared = player.startTrack(audioTrack, !noInterrupt);
 
-        if (!playing) {
+        if (!trackStared)
             trackQueue.add(new AbstractMap.SimpleEntry<>(video, audioTrack));
-        }
+
         MusicBot musicBot = MusicBot.getInstance();
         GatewayDiscordClient gatewayDiscordClient = musicBot.getGatewayDiscordClient();
 
         gatewayDiscordClient.getGuildById(guildId)
-                .doOnNext(guild -> {
-                    Snowflake channelId = musicBot.getRegisterChannel(guild.getId());
+                .flatMap(guild -> guild.getChannelById(musicBot.getRegisterChannel(guild.getId())).cast(TextChannel.class)
+                        .flatMap(channel -> channel.getMessagesAfter(Snowflake.of(0))
+                                .flatMap(message -> message.edit(messageEditSpec -> {
+                                    StringBuilder builder = new StringBuilder();
 
-                    guild.getChannelById(channelId).cast(TextChannel.class)
-                            .flatMap(channel -> channel.getMessagesAfter(Snowflake.of(0))
-                                    .flatMap(afterMessage -> Mono.justOrEmpty(afterMessage.getAuthor())
-                                            .filter(author -> author.getId().equals(gatewayDiscordClient.getSelfId()))
-                                            .doOnNext(author -> afterMessage.edit(messageEditSpec -> {
-                                                StringBuilder builder = new StringBuilder();
+                                    if (!trackQueue.isEmpty()) {
+                                        builder.append("__**재생 목록:**__");
+                                        for (int i = 1; i <= trackQueue.size(); i++) {
+                                            AbstractMap.SimpleEntry<Video, AudioTrack> entry = trackQueue.get(i - 1);
 
-                                                if (trackQueue.isEmpty()) {
-                                                    builder.append("노래 제목을 입력하거나 Youtube URL 주소를 입력해주세요.");
-                                                } else {
-                                                    //List가 동기방식으로 설정되어 있기 때문에 문제없음.?? 확인
-                                                    for (int i = 1; i <= trackQueue.size(); i++) {
-                                                        AbstractMap.SimpleEntry<Video, AudioTrack> entry = trackQueue.get(i - 1);
+                                            builder.append(i);
+                                            builder.append(". ");
+                                            builder.append(entry.getKey().getSnippet().getTitle());
 
-                                                        builder.append(i);
-                                                        builder.append(". ");
-                                                        builder.append(entry.getKey().getSnippet().getTitle());
-                                                        builder.append('\n');
-                                                    }
-                                                    builder.deleteCharAt(builder.length() - 1);
-                                                }
+                                            if (i < trackQueue.size())
+                                                builder.append('\n');
+                                        }
+                                    } else {
+                                        builder.append("노래 제목을 입력하거나 Youtube URL 주소를 입력해주세요 !");
+                                    }
 
-                                                Embed oldEmbed = afterMessage.getEmbeds().get(0);
+                                    Embed oldEmbed = message.getEmbeds().get(0);
 
-                                                //oldEmbed로 setImage 설정하는 경우 기존에 생성된 자원을 재활용 할 수가 없음.
-                                                messageEditSpec.setContent(builder.toString()).addEmbed(embedCreateSpec ->
-                                                        embedCreateSpec.setTitle(playing ? video.getSnippet().getTitle() + " " + YoutubeAPI.getDurationFormat(video.getContentDetails().getDuration()) : oldEmbed.getTitle().orElse("Data Error"))
-                                                                .setImage(playing ? YoutubeAPI.getMaxThumbnail(video.getSnippet().getThumbnails()).getUrl() : (oldEmbed.getImage().isPresent() ? oldEmbed.getImage().get().getUrl() : ""))
-                                                                .setUrl(playing ? "https://youtu.be/" + video.getId() : ""));
-                                            }).subscribe())).next())
-                            .subscribe();
-                }).subscribe();
+                                    messageEditSpec.setContent(builder.toString()).addEmbed(embedCreateSpec ->
+                                            embedCreateSpec.setTitle(trackStared ? video.getSnippet().getTitle() + " " + YoutubeAPI.getDurationFormat(video.getContentDetails().getDuration()) : oldEmbed.getTitle().orElse("Data Error"))
+                                                    .setImage(trackStared ? YoutubeAPI.getMaxThumbnail(video.getSnippet().getThumbnails()).getUrl() : (oldEmbed.getImage().isPresent() ? oldEmbed.getImage().get().getUrl() : ""))
+                                                    .setUrl(trackStared ? "https://youtu.be/" + video.getId() : ""));
+                                })).next())).subscribe();
 
     }
 
@@ -104,9 +93,9 @@ public final class AudioTrackScheduler extends AudioEventAdapter {
                                     .flatMap(afterMessage -> Mono.justOrEmpty(afterMessage.getAuthor())
                                             .filter(author -> author.getId().equals(gatewayDiscordClient.getSelfId()))
                                             .doOnNext(author -> afterMessage.edit(messageEditSpec ->
-                                                            messageEditSpec.setContent("").addEmbed(embedCreateSpec ->
-                                                                    embedCreateSpec.setTitle("현재 재생중인 노래가 없습니다.")
-                                                                            .setImage("https://thumbs.dreamstime.com/b/gramophone-vector-logo-design-template-music-retro-white-background-illustration-53237065.jpg")))
+                                                    messageEditSpec.setContent("노래 제목을 입력하거나 Youtube URL 주소를 입력해주세요 !").addEmbed(embedCreateSpec ->
+                                                            embedCreateSpec.setTitle("현재 재생중인 노래가 없습니다.")
+                                                                    .setImage("https://thumbs.dreamstime.com/b/gramophone-vector-logo-design-template-music-retro-white-background-illustration-53237065.jpg")))
                                                     .subscribe())).next())
                             .subscribe();
                 }).subscribe();

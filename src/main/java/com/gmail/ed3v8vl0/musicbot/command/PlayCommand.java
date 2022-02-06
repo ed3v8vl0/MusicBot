@@ -85,7 +85,7 @@ public class PlayCommand implements ICommand {
 
                             if (host.equals("www.youtube.com") || host.equals("youtu.be")) {
                                 String query = url.getQuery();
-                                Video video = youtubeAPI.searchVideo(query == null ? url.getPath() : YoutubeAPI.parseQuery(query));
+                                Video video = youtubeAPI.getVideo(query == null ? url.getPath().substring(1) : YoutubeAPI.parseQuery(query));
 
                                 if (video != null)
                                     audioPlayerManager.loadItemOrdered(manager, content, new YoutubeAudioLoadResultHandler(manager, video));

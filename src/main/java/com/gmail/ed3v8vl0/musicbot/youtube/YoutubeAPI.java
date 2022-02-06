@@ -26,7 +26,6 @@ import java.util.List;
 public class YoutubeAPI {
     private static final Logger logger = LoggerFactory.getLogger(YoutubeAPI.class);
 
-    private final String GOOGLE_KEY; //"AIzaSyDwUOT_g8yxMugoIYr-1zVwMGtb_4ccR8Q";
     private final HttpTransport HTTP_TRANSPORT = new NetHttpTransport();
     private final JsonFactory JSON_FACTORY = GsonFactory.getDefaultInstance();
 
@@ -35,9 +34,8 @@ public class YoutubeAPI {
     private YouTube.Search.List search;
 
     public YoutubeAPI(String GOOGLE_KEY) {
-        this.GOOGLE_KEY = GOOGLE_KEY;
         youtube = new YouTube.Builder(HTTP_TRANSPORT, JSON_FACTORY, request -> {
-        }).setApplicationName("youtube-musicbox").build();
+        }).setApplicationName("musicbox").build();
 
         try {
             videos = youtube.videos().list(Arrays.asList("id", "snippet", "contentDetails"));
@@ -49,7 +47,7 @@ public class YoutubeAPI {
         }
     }
 
-    public synchronized Video searchVideo(String query) {
+    public Video searchVideo(String query) {
         Video video = null;
 
         try {
@@ -72,7 +70,7 @@ public class YoutubeAPI {
         return video;
     }
 
-    public synchronized Video getVideo(String query) {
+    public Video getVideo(String query) {
         Video video = null;
 
         try {
@@ -155,10 +153,8 @@ public class YoutubeAPI {
             String key = query.substring(i, i = query.indexOf('=', i + 1));
             String value = query.substring(i + 1, (i = query.indexOf('&', i + 1)) == -1 ? query.length() : i);
 
-            if (key == "v")
+            if (key.equals("v"))
                 return value;
-            if (i == -1)
-                break;
         }
 
         return "";
