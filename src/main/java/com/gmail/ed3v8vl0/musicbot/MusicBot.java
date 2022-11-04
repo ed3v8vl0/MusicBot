@@ -1,7 +1,6 @@
 package com.gmail.ed3v8vl0.musicbot;
 
 import com.gmail.ed3v8vl0.musicbot.command.*;
-import com.gmail.ed3v8vl0.musicbot.schedule.MessageScheduler;
 import com.gmail.ed3v8vl0.musicbot.youtube.YoutubeAPI;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.player.DefaultAudioPlayerManager;
@@ -15,10 +14,8 @@ import discord4j.core.object.entity.channel.TextChannel;
 import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.sql.*;
 import java.util.HashMap;
@@ -44,8 +41,6 @@ public class MusicBot {
     @Getter
     private Connection connection;
 
-    @Getter
-    private final MessageScheduler messageScheduler;
     @Getter
     private final EventListener eventListener;
     @Getter
@@ -80,8 +75,7 @@ public class MusicBot {
         youtubeAPI = new YoutubeAPI(properties.getProperty("GOOGLE_KEY"));
         discordClient = DiscordClient.create(properties.getProperty("DISCORD_TOKEN"));
         gatewayDiscordClient = discordClient.login().block();
-        messageScheduler = new MessageScheduler(this);
-        eventListener = new EventListener(this, messageScheduler);
+        eventListener = new EventListener(this);
 
         //Init
         gatewayDiscordClient.on(eventListener).subscribe();
@@ -90,12 +84,24 @@ public class MusicBot {
         AudioSourceManagers.registerRemoteSources(audioPlayerManager);
         AudioSourceManagers.registerLocalSource(audioPlayerManager);
 
-        commandMap.put("!setup", new SetupCommand(this));
-        commandMap.put("!play", new PlayCommand(this, audioPlayerManager));
-        commandMap.put("!stop", new StopCommand());
-        commandMap.put("!pause", new PauseCommand());
-        commandMap.put("!resume", new ResumeCommand());
-        commandMap.put("!skip", new SkipCommand());
+
+        //PostInit
+        /**
+         * 추후 com.gmail.ed3v8vl0.musicbot.command 패키지에 @Command 어노테이션이 등록된 클래스들을 불러와서
+         * 자동으로 커맨드를 등록
+         */
+        commandMap.put("setup", new SetupCommand(this));
+        commandMap.put("play", new PlayCommand(this, audioPlayerManager));
+        commandMap.put("stop", new StopCommand());
+        commandMap.put("pause", new PauseCommand());
+        commandMap.put("resume", new ResumeCommand());
+        commandMap.put("skip", new SkipCommand());
+
+        long applicationId = gatewayDiscordClient.getRestClient().getApplicationId().block();
+
+        for (ICommand command : commandMap.values()) {
+            gatewayDiscordClient.getRestClient().getApplicationService().createGlobalApplicationCommand(applicationId, command.commandRequest);
+        }
     }
 
     public boolean registerChannel(Guild guild, TextChannel channel) {
@@ -114,17 +120,16 @@ public class MusicBot {
         return false;
     }
 
-    public boolean hasRegisterChannel(Guild guild) {
+    public Mono<Boolean> isUnregisterChannel(Guild guild) {
         Snowflake channelId = channelMap.get(guild.getId());
 
         if (channelId != null) {
             return guild.getChannels()
                     .filter(channel -> channel.getId().equals(channelId))
                     .count()
-                    .map(count -> 1L == count)
-                    .block();
+                    .map(count -> 0 == count);
         } else {
-            return false;
+            return Mono.just(true);
         }
     }
 

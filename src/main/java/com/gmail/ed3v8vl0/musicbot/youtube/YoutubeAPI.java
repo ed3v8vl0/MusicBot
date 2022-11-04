@@ -6,15 +6,10 @@ import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.services.youtube.YouTube;
 import com.google.api.services.youtube.model.*;
-import org.apache.http.NameValuePair;
-import org.apache.http.client.utils.URLEncodedUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.AbstractMap;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -41,7 +36,7 @@ public class YoutubeAPI {
             videos = youtube.videos().list(Arrays.asList("id", "snippet", "contentDetails"));
             videos.setKey(GOOGLE_KEY).setFields("items(id,snippet(thumbnails,title),contentDetails/duration)");
             search = youtube.search().list(Arrays.asList("id"));
-            search.setKey(GOOGLE_KEY).setType(Arrays.asList("video")).setFields("items/id");
+            search.setKey(GOOGLE_KEY).setType(Arrays.asList("video")).setFields("items/id").setMaxResults(1L);
         } catch (IOException e) {
             logger.error("", e);
         }

@@ -11,12 +11,16 @@ import discord4j.common.util.Snowflake;
 import discord4j.core.GatewayDiscordClient;
 import discord4j.core.object.Embed;
 import discord4j.core.object.entity.channel.TextChannel;
+import discord4j.core.spec.EmbedCreateSpec;
+import discord4j.core.spec.MessageEditSpec;
+import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
 import java.util.AbstractMap;
 import java.util.LinkedList;
 import java.util.List;
 
+@Slf4j
 public final class AudioTrackScheduler extends AudioEventAdapter {
     //ConcurrentModificationException
     private final List<AbstractMap.SimpleEntry<Video, AudioTrack>> trackQueue;
@@ -47,13 +51,16 @@ public final class AudioTrackScheduler extends AudioEventAdapter {
         GatewayDiscordClient gatewayDiscordClient = musicBot.getGatewayDiscordClient();
 
         gatewayDiscordClient.getGuildById(guildId)
-                .flatMap(guild -> guild.getChannelById(musicBot.getRegisterChannel(guild.getId())).cast(TextChannel.class)
+                .flatMap(guild -> guild.getChannelById(musicBot.getRegisterChannel(guild.getId()))
+                        .cast(TextChannel.class)
                         .flatMap(channel -> channel.getMessagesAfter(Snowflake.of(0))
-                                .flatMap(message -> message.edit(messageEditSpec -> {
+                                .next()
+                                .flatMap(message -> {
+                                    MessageEditSpec.Builder messageEditSpec = MessageEditSpec.builder();
                                     StringBuilder builder = new StringBuilder();
 
                                     if (!trackQueue.isEmpty()) {
-                                        builder.append("__**재생 목록:**__");
+                                        builder.append("__**재생 목록: **__");
                                         for (int i = 1; i <= trackQueue.size(); i++) {
                                             AbstractMap.SimpleEntry<Video, AudioTrack> entry = trackQueue.get(i - 1);
 
@@ -68,13 +75,24 @@ public final class AudioTrackScheduler extends AudioEventAdapter {
                                         builder.append("노래 제목을 입력하거나 Youtube URL 주소를 입력해주세요 !");
                                     }
 
-                                    Embed oldEmbed = message.getEmbeds().get(0);
+                                    List<Embed> embedList = message.getEmbeds();
 
-                                    messageEditSpec.setContent(builder.toString()).addEmbed(embedCreateSpec ->
-                                            embedCreateSpec.setTitle(trackStared ? video.getSnippet().getTitle() + " " + YoutubeAPI.getDurationFormat(video.getContentDetails().getDuration()) : oldEmbed.getTitle().orElse("Data Error"))
-                                                    .setImage(trackStared ? YoutubeAPI.getMaxThumbnail(video.getSnippet().getThumbnails()).getUrl() : (oldEmbed.getImage().isPresent() ? oldEmbed.getImage().get().getUrl() : ""))
-                                                    .setUrl(trackStared ? "https://youtu.be/" + video.getId() : ""));
-                                })).next())).subscribe();
+                                    if (embedList != null) {
+                                        Embed oldEmbed = embedList.get(0);
+
+                                        messageEditSpec.contentOrNull(builder.toString()).addEmbed(EmbedCreateSpec.builder().title(trackStared ? video.getSnippet().getTitle() + " " + YoutubeAPI.getDurationFormat(video.getContentDetails().getDuration()) : oldEmbed.getTitle().orElse("Data Error"))
+                                                .image(trackStared ? YoutubeAPI.getMaxThumbnail(video.getSnippet().getThumbnails()).getUrl() : (oldEmbed.getImage().isPresent() ? oldEmbed.getImage().get().getUrl() : ""))
+                                                .url(trackStared ? "https://youtu.be/" + video.getId() : "").build());
+                                    }
+
+                                    return message.edit(messageEditSpec.build());
+                                })))
+                .doOnError(throwable -> {
+                    log.trace("AudioTrackScheduler trackPlay Error Occurred.", throwable);
+                    log.error("AudioTrackScheduler trackPlay Error Occurred.\n{}", throwable.getMessage());
+                })
+                .onErrorResume(throwable -> Mono.never())
+                .subscribe();
 
     }
 
@@ -84,21 +102,20 @@ public final class AudioTrackScheduler extends AudioEventAdapter {
 
         trackQueue.clear();
         player.stopTrack();
-        gatewayDiscordClient.getGuildById(guildId)
-                .doOnNext(guild -> {
-                    Snowflake channelId = musicBot.getRegisterChannel(guild.getId());
 
-                    guild.getChannelById(channelId).cast(TextChannel.class)
-                            .flatMap(channel -> channel.getMessagesAfter(Snowflake.of(0))
-                                    .flatMap(afterMessage -> Mono.justOrEmpty(afterMessage.getAuthor())
-                                            .filter(author -> author.getId().equals(gatewayDiscordClient.getSelfId()))
-                                            .doOnNext(author -> afterMessage.edit(messageEditSpec ->
-                                                    messageEditSpec.setContent("노래 제목을 입력하거나 Youtube URL 주소를 입력해주세요 !").addEmbed(embedCreateSpec ->
-                                                            embedCreateSpec.setTitle("현재 재생중인 노래가 없습니다.")
-                                                                    .setImage("https://thumbs.dreamstime.com/b/gramophone-vector-logo-design-template-music-retro-white-background-illustration-53237065.jpg")))
-                                                    .subscribe())).next())
-                            .subscribe();
-                }).subscribe();
+        gatewayDiscordClient.getGuildById(guildId)
+                .flatMap(guild -> guild.getChannelById(musicBot.getRegisterChannel(guild.getId()))
+                        .cast(TextChannel.class)
+                        .flatMap(channel -> channel.getMessagesAfter(Snowflake.of(0))
+                                .next()
+                                .flatMap(message -> message.edit(MessageEditSpec.builder().contentOrNull("노래 제목을 입력하거나 Youtube URL 주소를 입력해주세요 !").addEmbed(EmbedCreateSpec.builder().title("현재 재생중인 노래가 없습니다.")
+                                        .image("https://c.wallhere.com/photos/cd/8d/1280x720_px_fantasy_Art-740774.jpg!d").build()).build()))))
+                .doOnError(throwable -> {
+                    log.trace("AudioTrackScheduler trackPlay Error Occurred.", throwable);
+                    log.error("AudioTrackScheduler trackPlay Error Occurred.\n{}", throwable.getMessage());
+                })
+                .onErrorResume(throwable -> Mono.never())
+                .subscribe();
     }
 
     public synchronized void trackPause() {
