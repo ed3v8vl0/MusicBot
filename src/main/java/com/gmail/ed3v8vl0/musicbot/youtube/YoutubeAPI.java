@@ -33,53 +33,44 @@ public class YoutubeAPI {
         }).setApplicationName("musicbox").build();
 
         try {
-            videos = youtube.videos().list(Arrays.asList("id", "snippet", "contentDetails"));
-            videos.setKey(GOOGLE_KEY).setFields("items(id,snippet(thumbnails,title),contentDetails/duration)");
-            search = youtube.search().list(Arrays.asList("id"));
-            search.setKey(GOOGLE_KEY).setType(Arrays.asList("video")).setFields("items/id").setMaxResults(1L);
+            videos = youtube.videos().list(Arrays.asList("id", "snippet"));
+            videos.setKey(GOOGLE_KEY).setFields("items(id,snippet(thumbnails,title))");
+            search = youtube.search().list(Arrays.asList("id, snippet"));
+            search.setKey(GOOGLE_KEY).setType(Arrays.asList("video")).setFields("items/id/videoId,items/snippet(thumbnails,title)").setMaxResults(1L);
         } catch (IOException e) {
             logger.error("", e);
         }
     }
 
-    public Video searchVideo(String query) {
-        Video video = null;
-
+    public VideoData searchVideo(String query) {
         try {
             search.setQ(query);
             SearchListResponse searchResponse = search.execute();
             List<SearchResult> searchResults = searchResponse.getItems();
 
             if (!searchResults.isEmpty()) {
-                VideoListResponse response = videos.setId(Arrays.asList(searchResults.get(0).getId().getVideoId())).execute();
-                List<Video> videoList = response.getItems();
-
-                if (!videoList.isEmpty()) {
-                    video = videoList.get(0);
-                }
+                return new VideoData(searchResults.get(0));
             }
         } catch (IOException e) {
             logger.error("", e);
         }
 
-        return video;
+        return null;
     }
 
-    public Video getVideo(String query) {
-        Video video = null;
-
+    public VideoData getVideo(String query) {
         try {
             VideoListResponse response = videos.setId(Arrays.asList(query)).execute();
             List<Video> videoList = response.getItems();
 
             if (!videoList.isEmpty()) {
-                video = videoList.get(0);
+                return new VideoData(videoList.get(0));
             }
         } catch (IOException e) {
             logger.error("", e);
         }
 
-        return video;
+        return null;
     }
 
     public static Thumbnail getMaxThumbnail(ThumbnailDetails thumbnailDetails) {
@@ -110,6 +101,7 @@ public class YoutubeAPI {
         }
     }
 
+    @Deprecated
     public static String getDurationFormat(String duration) {
         StringBuilder builder = new StringBuilder();
 

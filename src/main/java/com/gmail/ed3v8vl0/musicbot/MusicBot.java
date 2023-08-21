@@ -1,6 +1,7 @@
 package com.gmail.ed3v8vl0.musicbot;
 
 import com.gmail.ed3v8vl0.musicbot.command.*;
+import com.gmail.ed3v8vl0.musicbot.scheduler.RateLimiter;
 import com.gmail.ed3v8vl0.musicbot.youtube.YoutubeAPI;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.player.DefaultAudioPlayerManager;
@@ -10,10 +11,10 @@ import discord4j.common.util.Snowflake;
 import discord4j.core.DiscordClient;
 import discord4j.core.GatewayDiscordClient;
 import discord4j.core.object.entity.Guild;
-import discord4j.core.object.entity.channel.TextChannel;
 import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.io.IOException;
@@ -49,11 +50,12 @@ public class MusicBot {
     private final AudioPlayerManager audioPlayerManager;
 
     public static void main(final String[] args) {
-        INSTANCE = new MusicBot();
+        new MusicBot();
         INSTANCE.getGatewayDiscordClient().onDisconnect().block();
     }
 
     private MusicBot() {
+        MusicBot.INSTANCE = this;
         Properties properties = new Properties();
 
         try {
@@ -70,10 +72,10 @@ public class MusicBot {
             System.exit(1);
         }
 
-
         //PreInit
         youtubeAPI = new YoutubeAPI(properties.getProperty("GOOGLE_KEY"));
-        discordClient = DiscordClient.create(properties.getProperty("DISCORD_TOKEN"));
+        //discordClient = DiscordClient.create(properties.getProperty("DISCORD_TOKEN"));
+        discordClient = DiscordClient.builder(properties.getProperty("DISCORD_TOKEN")).setGlobalRateLimiter(RateLimiter.create()).build();
         gatewayDiscordClient = discordClient.login().block();
         eventListener = new EventListener(this);
 
@@ -91,33 +93,30 @@ public class MusicBot {
          * 자동으로 커맨드를 등록
          */
         commandMap.put("setup", new SetupCommand(this));
-        commandMap.put("play", new PlayCommand(this, audioPlayerManager));
-        commandMap.put("stop", new StopCommand());
-        commandMap.put("pause", new PauseCommand());
-        commandMap.put("resume", new ResumeCommand());
-        commandMap.put("skip", new SkipCommand());
+//        commandMap.put("play", new PlayCommand(this, audioPlayerManager));
+//        commandMap.put("stop", new StopCommand());
+//        commandMap.put("pause", new PauseCommand());
+//        commandMap.put("resume", new ResumeCommand());
+//        commandMap.put("skip", new SkipCommand());
 
-        long applicationId = gatewayDiscordClient.getRestClient().getApplicationId().block();
-
-        for (ICommand command : commandMap.values()) {
-            gatewayDiscordClient.getRestClient().getApplicationService().createGlobalApplicationCommand(applicationId, command.commandRequest);
-        }
+        gatewayDiscordClient.getRestClient().getApplicationId()
+                .doOnNext(applicationId -> Flux.fromIterable(commandMap.values())
+                        .flatMap(command -> gatewayDiscordClient.getRestClient().getApplicationService().createGlobalApplicationCommand(applicationId, command.commandRequest))
+                        .subscribe())
+                .subscribe();
     }
 
-    public boolean registerChannel(Guild guild, TextChannel channel) {
+    public void registerChannel(Snowflake guildId, Snowflake chanelId) {
         try (PreparedStatement statement = connection.prepareStatement("INSERT INTO channels(guildId, channelId) VALUES(?,?)\n" +
                 "ON DUPLICATE KEY UPDATE channelId=VALUES(channelId)")) {
-            statement.setLong(1, guild.getId().asLong());
-            statement.setLong(2, channel.getId().asLong());
+            statement.setLong(1, guildId.asLong());
+            statement.setLong(2, chanelId.asLong());
 
             statement.execute();
-            channelMap.put(guild.getId(), channel.getId());
-            return true;
+            channelMap.put(guildId, chanelId);
         } catch (SQLException e) {
             logger.error("", e);
         }
-
-        return false;
     }
 
     public Mono<Boolean> isUnregisterChannel(Guild guild) {

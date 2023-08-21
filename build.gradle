@@ -1,15 +1,17 @@
 plugins {
-    id 'java'
+    id 'java-library'
     id 'application'
+    id "com.github.johnrengelman.shadow" version "7.1.2"
 }
 
 repositories {
     mavenCentral()
+    maven { url = 'https://jitpack.io' }
     maven { url = 'https://m2.dv8tion.net/releases' }
 }
 
 group 'com.gmail.ed3v8vl0.musicbot'
-version '2.0-SNAPSHOT'
+version '3.0-SNAPSHOT'
 mainClassName = 'com.gmail.ed3v8vl0.musicbot.MusicBot'
 compileJava.options.encoding = 'UTF-8'
 
@@ -18,20 +20,20 @@ jar {
         attributes 'Version': version, 'Main-Class': mainClassName
     }
     from {
-        configurations.compileClasspath.collect { it.isDirectory() ? it : zipTree(it) }
-
+        configurations.compileClasspath.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
     }
     duplicatesStrategy = 'INCLUDE'
 }
 
 dependencies {
-    implementation 'com.discord4j:discord4j-core:3.2.3'
-    implementation 'com.sedmelluq:lavaplayer:1.3.78'
-    implementation 'org.slf4j:slf4j-api:2.0.3'
-    implementation 'org.slf4j:slf4j-simple:2.0.3'
-    implementation 'com.google.apis:google-api-services-youtube:v3-rev20220926-2.0.0'
-    implementation 'com.google.http-client:google-http-client-gson:1.42.2'
-    implementation 'mysql:mysql-connector-java:8.0.30'
-    implementation 'org.projectlombok:lombok:1.18.24'
-    annotationProcessor 'org.projectlombok:lombok:1.18.24'
+    implementation 'dev.arbjerg:lavaplayer:2.0.0'
+    implementation 'com.discord4j:discord4j-core:3.2.5'
+    implementation 'ch.qos.logback:logback-classic:1.4.8'
+    implementation 'com.google.apis:google-api-services-youtube:v3-rev20230521-2.0.0'
+    implementation 'com.google.http-client:google-http-client-gson:1.43.3'
+    implementation 'mysql:mysql-connector-java:8.0.33'
+    implementation 'org.projectlombok:lombok:1.18.28'
+    annotationProcessor 'org.projectlombok:lombok:1.18.28'
 }
